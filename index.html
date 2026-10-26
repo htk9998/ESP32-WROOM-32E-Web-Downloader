@@ -93,6 +93,15 @@
       <button id="btnDisconnect" class="btn-secondary hidden">Disconnect</button>
     </div>
 
+    <div class="row" style="margin-top:8px">
+      <button id="btnMonitor" class="btn-secondary" style="flex:0 0 auto">🖥️ Serial 열기 (115200) — 부트모드 확인</button>
+      <button id="btnMonitorStop" class="btn-danger hidden" style="flex:0 0 auto">Serial 닫기</button>
+    </div>
+    <div style="font-size:12px;color:#666;margin-top:4px">
+      Serial 을 연 뒤 보드를 <b>리셋</b> → 아래 로그에서 <code>boot:0x3 (DOWNLOAD...)</code> 가 보이면 다운로드 모드.
+      <code>boot:0x13 (SPI_FAST_FLASH_BOOT)</code> 또는 앱 로그면 일반 부팅. <b>Flash 전에는 Serial 을 닫아야 합니다.</b>
+    </div>
+
     <div id="status" class="status info hidden"></div>
     <progress id="prog" class="hidden" value="0" max="100"></progress>
     <div id="log"></div>
@@ -136,11 +145,64 @@
       setStatus('❌ 이 브라우저는 WebSerial API 를 지원하지 않습니다. Chrome / Edge 사용 필요.', 'error');
       $('btnSelectPort').disabled = true;
       $('btnConnect').disabled = true;
+      $('btnMonitor').disabled = true;
     }
 
     let device = null;
     let transport = null;
     let esploader = null;
+
+    /* 시리얼 모니터 (115200) — esptool 과 포트를 공유하므로 Flash 전에 반드시 닫는다. */
+    let monPort = null, monReader = null, monRunning = false;
+
+    async function startMonitor() {
+      try {
+        monPort = device || await navigator.serial.requestPort({});
+        device = monPort;                                   // Flash 와 포트 공유
+        $('portInfo').textContent = `✅ ${describePort(device)}`;
+        $('portInfo').style.color = '#059669';
+        $('btnConnect').disabled = false;
+        await monPort.open({ baudRate: 115200 });
+        monRunning = true;
+        $('btnMonitor').classList.add('hidden');
+        $('btnMonitorStop').classList.remove('hidden');
+        setStatus('🖥️ Serial 모니터 ON (115200). 보드를 리셋해 메시지를 확인하세요.', 'info');
+        log('--- Serial monitor 시작 (115200) ---');
+        const decoder = new TextDecoder();
+        let tail = '';
+        monReader = monPort.readable.getReader();
+        while (monRunning) {
+          const { value, done } = await monReader.read();
+          if (done) break;
+          if (value) {
+            const text = decoder.decode(value, { stream: true });
+            logEl.textContent += text;
+            logEl.scrollTop = logEl.scrollHeight;
+            tail = (tail + text).slice(-400);
+            if (/boot:0x3|DOWNLOAD|waiting for download/i.test(tail)) {
+              setStatus('✅ 다운로드(download) 모드 감지됨 — Serial 닫고 Flash 하세요.', 'success');
+              tail = '';
+            } else if (/SPI_FAST_FLASH_BOOT|boot:0x13/i.test(tail)) {
+              setStatus('ℹ️ 일반 부팅 감지 (download 아님) — BOOT 누른 채 리셋 필요.', 'warn');
+              tail = '';
+            }
+          }
+        }
+      } catch (e) {
+        setStatus(`❌ 모니터 오류: ${e.message || e}`, 'error');
+        log(`MONITOR ERROR: ${e.message || e}`);
+      }
+    }
+
+    async function stopMonitor() {
+      monRunning = false;
+      try { if (monReader) { await monReader.cancel(); monReader.releaseLock(); } } catch (_) {}
+      try { if (monPort) await monPort.close(); } catch (_) {}
+      monReader = null; monPort = null;
+      $('btnMonitor').classList.remove('hidden');
+      $('btnMonitorStop').classList.add('hidden');
+      log('--- Serial monitor 종료 ---');
+    }
 
     /* USB Vendor ID → 이름 매핑 (자주 쓰이는 USB-Serial 칩) */
     const USB_VENDOR_NAMES = {
@@ -182,6 +244,7 @@
     }
 
     async function connectAndFlash() {
+      if (monRunning) { await stopMonitor(); }   // 포트 배타적 → Flash 전 모니터 닫기
       if (!device) {
         setStatus('⚠️ 먼저 COM Port 를 선택하세요.', 'warn');
         return;
@@ -338,6 +401,8 @@
 
     $('btnSelectPort').addEventListener('click', selectPort);
     $('btnConnect').addEventListener('click', connectAndFlash);
+    $('btnMonitor').addEventListener('click', startMonitor);
+    $('btnMonitorStop').addEventListener('click', stopMonitor);
     $('btnErase').addEventListener('click', eraseFlash);
     $('btnDisconnect').addEventListener('click', async () => {
       if (transport) await transport.disconnect();
