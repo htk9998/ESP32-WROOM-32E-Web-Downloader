@@ -156,13 +156,24 @@
     let monPort = null, monReader = null, monRunning = false;
 
     async function startMonitor() {
+      if (monRunning) return;                 // 이미 열려 있으면 무시 (중복클릭 방지)
+      $('btnMonitor').disabled = true;
       try {
         monPort = device || await navigator.serial.requestPort({});
         device = monPort;                                   // Flash 와 포트 공유
         $('portInfo').textContent = `${describePort(device)}`;
         $('portInfo').style.color = '#059669';
         $('btnConnect').disabled = false;
-        await monPort.open({ baudRate: 115200 });
+        try {
+          await monPort.open({ baudRate: 115200 });
+        } catch (openErr) {
+          setStatus('포트를 열 수 없습니다 — 다른 프로그램(시리얼 모니터 / IDE / 이 페이지의 다른 탭)이 '
+                    + '해당 포트를 사용 중입니다.\n→ 그 프로그램을 닫고, 페이지 새로고침(F5) 후 다시 시도하세요.', 'error');
+          log(`OPEN FAILED: ${openErr.message || openErr}`);
+          monPort = null;
+          $('btnMonitor').disabled = false;
+          return;
+        }
         monRunning = true;
         $('btnMonitor').classList.add('hidden');
         $('btnMonitorStop').classList.remove('hidden');
@@ -191,6 +202,8 @@
       } catch (e) {
         setStatus(`모니터 오류: ${e.message || e}`, 'error');
         log(`MONITOR ERROR: ${e.message || e}`);
+      } finally {
+        $('btnMonitor').disabled = false;
       }
     }
 
