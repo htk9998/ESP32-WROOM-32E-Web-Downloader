@@ -1,0 +1,15 @@
+# Firmware bin files 은 절대 커밋 금지 (별도 전달 원칙)
+*.bin
+FW_Update_V*
+FW_Total_V*
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*~

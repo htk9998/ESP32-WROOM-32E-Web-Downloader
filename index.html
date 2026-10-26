@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP32-WROOM-32E Downloader</title>
+  <style>
+    :root {
+      --primary: #1F497D;
+      --accent: #00D9FF;
+      --bg-dark: #0F1822;
+      --bg-card: #FFFFFF;
+      --text: #333;
+      --border: #E5E7EB;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #F5F7FA;
+      color: var(--text);
+    }
+    h1 { color: var(--primary); border-bottom: 3px solid var(--accent); padding-bottom: 10px; margin-bottom: 6px; }
+    h2 { color: #666; font-size: 16px; margin-top: 4px; font-weight: normal; }
+    .card { background: var(--bg-card); padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 20px 0; }
+    .step { margin: 12px 0; padding-left: 24px; position: relative; }
+    .step::before { content: attr(data-num); position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: var(--accent); color: white; border-radius: 50%; text-align: center; font-size: 12px; line-height: 20px; font-weight: bold; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; }
+    input[type="file"], input[type="text"] { width: 100%; padding: 10px; border: 2px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; }
+    input[type="text"] { font-family: 'Consolas', monospace; }
+    button { cursor: pointer; padding: 14px 28px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 8px 4px; transition: transform 0.1s; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-secondary { background: #6B7280; color: white; }
+    .btn-danger { background: #F43F5E; color: white; }
+    .status { padding: 12px; border-radius: 6px; margin: 12px 0; font-family: 'Consolas', monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+    .status.info { background: #DBEAFE; border-left: 4px solid #3B82F6; }
+    .status.success { background: #D1FAE5; border-left: 4px solid #10B981; }
+    .status.error { background: #FEE2E2; border-left: 4px solid #EF4444; }
+    .status.warn { background: #FEF3C7; border-left: 4px solid #F59E0B; }
+    progress { width: 100%; height: 20px; margin: 8px 0; }
+    #log { background: #1E1E1E; color: #D4D4D4; padding: 12px; border-radius: 6px; height: 200px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 12px; white-space: pre-wrap; }
+    .row { display: flex; gap: 12px; align-items: center; }
+    .row > * { flex: 1; }
+    .hidden { display: none !important; }
+    code { background: #F3F4F6; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', monospace; }
+  </style>
+</head>
+<body>
+  <h1>ESP32-WROOM-32E Downloader</h1>
+  <h2 style="color:#666;font-size:15px;margin:2px 0 14px;font-weight:normal">ESP32-WROOM-32E-N4 · 4MB Flash · esptool-js Web Flasher</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">사용 절차</h3>
+    <div class="step" data-num="1">JIG 를 USB-A <b>데이터 케이블</b> 로 PC 에 연결</div>
+    <div class="step" data-num="2">전달받은 <code>FW_Total_V*.bin</code> 파일 선택</div>
+    <div class="step" data-num="3"><b>Select COM Port</b> 클릭 → 브라우저 팝업에서 포트 선택</div>
+    <div class="step" data-num="4"><b>Flash</b> 버튼 클릭 → 자동 업데이트 진행</div>
+  </div>
+
+  <div class="card">
+    <label for="binFile">1. F/W bin 파일 선택 (<b>FW_Total_V*.bin</b> 만 허용)</label>
+    <input type="file" id="binFile" accept=".bin">
+    <div id="fileHint" style="font-size:12px; color:#666; margin-top:6px">
+      ⚠️ <code>FW_Total_V*.bin</code> 만 업로드 가능. <code>FW_Update_*.bin</code> (앱만) 은 flash offset 이 달라 부팅 안됨.
+    </div>
+
+    <label for="offset" style="margin-top:16px">2. Flash offset (Total 이미지 = <code>0x0</code>)</label>
+    <input type="text" id="offset" value="0x0">
+
+    <label style="margin-top:16px">3. COM Port 선택</label>
+    <div class="row">
+      <button id="btnSelectPort" class="btn-secondary" style="flex:0 0 auto">Select COM Port</button>
+      <div id="portInfo" style="flex:1; padding:10px; background:#F3F4F6; border-radius:6px; font-family:'Consolas',monospace; font-size:13px; color:#666">
+        (포트 미선택)
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px">
+      <button id="btnConnect" class="btn-primary" disabled>Flash</button>
+      <button id="btnErase" class="btn-danger hidden">Erase Flash</button>
+      <button id="btnDisconnect" class="btn-secondary hidden">Disconnect</button>
+    </div>
+
+    <div id="status" class="status info hidden"></div>
+    <progress id="prog" class="hidden" value="0" max="100"></progress>
+    <div id="log"></div>
+  </div>
+
+  <div class="card" style="background:#FEF3C7">
+    <b>브라우저 요구 사항</b>
+    <ul>
+      <li>Chrome 89+, Edge 89+, Opera (WebSerial API)</li>
+      <li>Firefox / Safari <b>지원 안 함</b></li>
+      <li>HTTPS 또는 localhost 접속 필수 (GitHub Pages 는 자동 HTTPS)</li>
+    </ul>
+  </div>
+
+  <p style="text-align:center; color:#999; margin-top:40px">
+    All copy right taekwangha
+  </p>
+
+  <script type="module">
+    // esptool-js from CDN (jsdelivr - GitHub friendly)
+    import { ESPLoader, Transport } from 'https://cdn.jsdelivr.net/npm/esptool-js@0.4.5/+esm';
+
+    const $ = (id) => document.getElementById(id);
+    const logEl = $('log');
+    const statusEl = $('status');
+    const progEl = $('prog');
+
+    function log(msg) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent += `[${ts}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+    function setStatus(msg, kind = 'info') {
+      statusEl.className = `status ${kind}`;
+      statusEl.textContent = msg;
+      statusEl.classList.remove('hidden');
+    }
+
+    if (!('serial' in navigator)) {
+      setStatus('❌ 이 브라우저는 WebSerial API 를 지원하지 않습니다. Chrome / Edge 사용 필요.', 'error');
+      $('btnSelectPort').disabled = true;
+      $('btnConnect').disabled = true;
+    }
+
+    let device = null;
+    let transport = null;
+    let esploader = null;
+
+    /* USB Vendor ID → 이름 매핑 (자주 쓰이는 USB-Serial 칩) */
+    const USB_VENDOR_NAMES = {
+      0x10c4: 'Silicon Labs CP210x',
+      0x1a86: 'QinHeng CH340/CH341',
+      0x0403: 'FTDI FT232',
+      0x303a: 'Espressif',
+      0x2341: 'Arduino',
+    };
+
+    function describePort(port) {
+      const info = port.getInfo ? port.getInfo() : {};
+      const vid = info.usbVendorId;
+      const pid = info.usbProductId;
+      if (vid !== undefined) {
+        const name = USB_VENDOR_NAMES[vid] || 'Unknown vendor';
+        return `${name}  (VID:0x${vid.toString(16).padStart(4,'0')}  PID:0x${(pid||0).toString(16).padStart(4,'0')})`;
+      }
+      return 'Serial Port (details unavailable)';
+    }
+
+    async function selectPort() {
+      try {
+        setStatus('🔌 COM 포트 선택 창을 확인하세요...', 'info');
+        device = await navigator.serial.requestPort({});
+        const desc = describePort(device);
+        $('portInfo').textContent = `✅ ${desc}`;
+        $('portInfo').style.color = '#059669';
+        $('btnConnect').disabled = false;
+        setStatus(`✅ 포트 선택됨 : ${desc}`, 'success');
+        log(`Port selected : ${desc}`);
+      } catch (e) {
+        if (e.name === 'NotFoundError') {
+          setStatus('⚠️ 포트가 선택되지 않았습니다. 다시 시도해주세요.', 'warn');
+        } else {
+          setStatus(`❌ 포트 선택 실패: ${e.message || e}`, 'error');
+        }
+      }
+    }
+
+    async function connectAndFlash() {
+      if (!device) {
+        setStatus('⚠️ 먼저 COM Port 를 선택하세요.', 'warn');
+        return;
+      }
+      const fileInput = $('binFile');
+      if (!fileInput.files || fileInput.files.length === 0) {
+        setStatus('⚠️ bin 파일을 먼저 선택하세요.', 'warn');
+        return;
+      }
+      const file = fileInput.files[0];
+
+      /* [2026-08-11] 파일명 필터 : FW_Total_*.bin 만 허용.
+         FW_Update_*.bin (앱만) 을 실수로 올리면 offset=0 flash 시 bootloader 없어 부팅 안됨. */
+      if (!isTotalBin(file.name)) {
+        setStatus(`❌ 파일명이 규칙에 맞지 않습니다 : "${file.name}"\n` +
+                  `→ FW_Total_V*.bin (Total 이미지) 만 업로드 가능합니다.\n` +
+                  `→ FW_Update_*.bin 은 앱만 있어 offset 0x0 flash 시 부팅 안됨.`, 'error');
+        return;
+      }
+
+      const offsetStr = $('offset').value.trim();
+      const offset = parseInt(offsetStr, 16);
+      if (isNaN(offset)) {
+        setStatus('⚠️ Offset 이 잘못됨. 예: 0x0 또는 0x10000', 'warn');
+        return;
+      }
+
+      log(`bin file : ${file.name} (${file.size} bytes)`);
+      log(`offset   : 0x${offset.toString(16)}`);
+
+      // Read file as binary string
+      const fileArrayBuffer = await file.arrayBuffer();
+      const binaryString = new Uint8Array(fileArrayBuffer).reduce((acc, byte) => acc + String.fromCharCode(byte), '');
+
+      try {
+        transport = new Transport(device, true);
+
+        const flashOptions = {
+          transport: transport,
+          baudrate: 460800,
+          romBaudrate: 115200,
+          debugLogging: false,
+        };
+        esploader = new ESPLoader(flashOptions);
+        setStatus('🔗 ESP 연결 중...', 'info');
+        const chip = await esploader.main();
+        log(`Chip detected : ${chip}`);
+        setStatus(`✅ ${chip} 연결됨. Flash 시작...`, 'success');
+
+        // Flash
+        progEl.classList.remove('hidden');
+        progEl.value = 0;
+
+        await esploader.writeFlash({
+          fileArray: [{ data: binaryString, address: offset }],
+          flashSize: 'keep',
+          flashMode: 'keep',
+          flashFreq: 'keep',
+          eraseAll: false,
+          compress: true,
+          reportProgress: (idx, written, total) => {
+            const pct = Math.round((written / total) * 100);
+            progEl.value = pct;
+            if (pct % 5 === 0) log(`Flashing... ${pct}%`);
+          },
+        });
+
+        setStatus('✅ Flash 완료! JIG 리셋 중...', 'success');
+        log('Resetting device...');
+        await esploader.hardReset();
+        setStatus('✅ 업데이트 완료. JIG 가 재부팅되었습니다.', 'success');
+        $('btnErase').classList.remove('hidden');
+        $('btnDisconnect').classList.remove('hidden');
+      } catch (e) {
+        setStatus(`❌ 오류: ${e.message || e}`, 'error');
+        log(`ERROR: ${e.stack || e}`);
+      } finally {
+        try { if (transport) await transport.disconnect(); } catch (_) {}
+        device = null;
+        transport = null;
+        esploader = null;
+      }
+    }
+
+    async function eraseFlash() {
+      if (!confirm('전체 flash 를 지웁니다. 정말 진행하시겠습니까?')) return;
+      try {
+        device = await navigator.serial.requestPort({});
+        transport = new Transport(device, true);
+        esploader = new ESPLoader({ transport, baudrate: 460800, romBaudrate: 115200 });
+        await esploader.main();
+        setStatus('🗑️ 전체 erase 중...', 'warn');
+        await esploader.eraseFlash();
+        setStatus('✅ Erase 완료', 'success');
+      } catch (e) {
+        setStatus(`❌ ${e.message || e}`, 'error');
+      } finally {
+        try { if (transport) await transport.disconnect(); } catch (_) {}
+      }
+    }
+
+    /* [2026-08-11] Total 파일명 검증 함수 : "FW_Total_" 접두사 + ".bin" 확장자.
+       대소문자 무시. 예: FW_Total_V1.4.bin / fw_total_v1_4.bin 모두 허용. */
+    function isTotalBin(filename) {
+      const lower = filename.toLowerCase();
+      return lower.startsWith('fw_total_') && lower.endsWith('.bin');
+    }
+
+    /* 파일 선택 시 즉시 검증 → 규칙 위반이면 UI 에 경고 표시 (flash 버튼 누르기 전에도 안내) */
+    $('binFile').addEventListener('change', (e) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const name = files[0].name;
+      const hint = $('fileHint');
+      if (isTotalBin(name)) {
+        hint.innerHTML = `✅ 유효한 Total 파일 : <code>${name}</code>`;
+        hint.style.color = '#065F46';   /* green */
+        hint.style.background = '#D1FAE5';
+        hint.style.padding = '8px';
+        hint.style.borderRadius = '6px';
+      } else {
+        hint.innerHTML = `❌ 파일명 규칙 위반 : <code>${name}</code><br>` +
+                        `→ <code>FW_Total_V*.bin</code> 만 허용. <code>FW_Update_*.bin</code> 은 offset 이 달라 부팅 안됨.`;
+        hint.style.color = '#991B1B';   /* red */
+        hint.style.background = '#FEE2E2';
+        hint.style.padding = '8px';
+        hint.style.borderRadius = '6px';
+      }
+    });
+
+    $('btnSelectPort').addEventListener('click', selectPort);
+    $('btnConnect').addEventListener('click', connectAndFlash);
+    $('btnErase').addEventListener('click', eraseFlash);
+    $('btnDisconnect').addEventListener('click', async () => {
+      if (transport) await transport.disconnect();
+      device = null;
+      $('portInfo').textContent = '(포트 미선택)';
+      $('portInfo').style.color = '#666';
+      $('btnConnect').disabled = true;
+      setStatus('연결 해제됨', 'info');
+    });
+
+    log('페이지 로드 완료. 1) bin 선택 → 2) offset 확인 → 3) COM Port 선택 → 4) Flash');
+  </script>
+</body>
+</html>
