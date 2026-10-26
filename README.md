@@ -13,8 +13,8 @@ https://htk9998.github.io/ESP32-WROOM-32E-Web-Downloader/
 
 1. JIG 를 USB-A 데이터 케이블로 PC 에 연결
 2. 위 URL 을 Chrome / Edge 로 접속
-3. 별도 전달받은 `FW_Total_V*.bin` 파일 선택
-4. Flash offset 확인 (Total 이미지 : `0x0`)
+3. bin 파일 선택 — `FW_Total_V*.bin`(전체) 또는 `FW_Update_*.bin`/앱
+4. 이미지 종류 선택 → offset 자동 (Total `0x0` / App `0x10000` / 사용자지정)
 5. Connect & Flash 버튼 클릭 → COM 포트 선택 → 자동 flash
 6. 완료 시 JIG 자동 재부팅
 
@@ -24,11 +24,14 @@ https://htk9998.github.io/ESP32-WROOM-32E-Web-Downloader/
 |:-:|:-:|
 | 칩 | ESP32-WROOM-32E (ESP32, Xtensa dual-core) |
 | Flash | 4MB (N4) |
-| Total 이미지 offset | `0x0` (부트로더+파티션+앱 병합) |
+| Total 이미지 (`FW_Total_*.bin`) | offset `0x0` (부트로더+파티션+앱 병합) |
+| App 이미지 (`FW_Update_*.bin`) | offset `0x10000` (앱만) |
 
-> `FW_Total_V*.bin` 은 `esptool merge_bin` 으로 0x0 부터 병합한 전체 이미지라 offset `0x0` 에 그대로 flash 한다.
-> ESP32 의 부트로더는 원래 `0x1000` 이지만, Total 이미지는 0x0 부터 패딩되어 있어 offset `0x0` 이 맞다.
-> `FW_Update_*.bin` (앱만) 은 offset 이 달라 `0x0` flash 시 부팅 안됨 — 업로드 금지(파일명 필터로 차단).
+- `FW_Total_V*.bin` : `esptool merge_bin` 으로 0x0 부터 병합한 전체 이미지 → offset `0x0`.
+  ESP32 부트로더는 원래 `0x1000` 이지만 Total 은 0x0 부터 패딩돼 있어 `0x0` 이 맞다.
+- `FW_Update_*.bin` (앱만, = IDF 빌드의 `epd_esp32.bin`) → offset `0x10000` (factory app 파티션).
+- 파일 선택 시 이름으로 종류를 자동 판별해 offset 을 맞춰주고, 종류↔offset 이 어긋나면
+  (0x0 에 앱만, 0x10000 에 전체) **확인창으로 경고**해 부팅 불능 실수를 막는다.
 
 ## 브라우저 요구사항
 

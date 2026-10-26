@@ -56,20 +56,28 @@
   <div class="card">
     <h3 style="margin-top:0">사용 절차</h3>
     <div class="step" data-num="1">JIG 를 USB-A <b>데이터 케이블</b> 로 PC 에 연결</div>
-    <div class="step" data-num="2">전달받은 <code>FW_Total_V*.bin</code> 파일 선택</div>
+    <div class="step" data-num="2"><code>FW_Total_V*.bin</code>(전체) 또는 <code>FW_Update_*.bin</code>/앱 파일 선택</div>
     <div class="step" data-num="3"><b>Select COM Port</b> 클릭 → 브라우저 팝업에서 포트 선택</div>
     <div class="step" data-num="4"><b>Flash</b> 버튼 클릭 → 자동 업데이트 진행</div>
   </div>
 
   <div class="card">
-    <label for="binFile">1. F/W bin 파일 선택 (<b>FW_Total_V*.bin</b> 만 허용)</label>
+    <label for="binFile">1. F/W bin 파일 선택 (<b>.bin</b>)</label>
     <input type="file" id="binFile" accept=".bin">
     <div id="fileHint" style="font-size:12px; color:#666; margin-top:6px">
-      ⚠️ <code>FW_Total_V*.bin</code> 만 업로드 가능. <code>FW_Update_*.bin</code> (앱만) 은 flash offset 이 달라 부팅 안됨.
+      <code>FW_Total_V*.bin</code> (전체 → <code>0x0</code>) 또는 <code>FW_Update_*.bin</code> / 앱만 (→ <code>0x10000</code>) 업로드 가능.
     </div>
 
-    <label for="offset" style="margin-top:16px">2. Flash offset (Total 이미지 = <code>0x0</code>)</label>
-    <input type="text" id="offset" value="0x0">
+    <label style="margin-top:16px">2. 이미지 종류 (offset 자동)</label>
+    <div class="row" style="gap:8px; margin-top:4px">
+      <label style="font-weight:normal;margin:0;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="radio" name="imgType" value="total" checked style="width:auto;flex:0 0 auto"> Total 전체 <code>0x0</code></label>
+      <label style="font-weight:normal;margin:0;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="radio" name="imgType" value="app" style="width:auto;flex:0 0 auto"> App 만 <code>0x10000</code></label>
+      <label style="font-weight:normal;margin:0;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="radio" name="imgType" value="custom" style="width:auto;flex:0 0 auto"> 사용자 지정</label>
+    </div>
+    <input type="text" id="offset" value="0x0" style="margin-top:8px" readonly>
 
     <label style="margin-top:16px">3. COM Port 선택</label>
     <div class="row">
@@ -185,20 +193,23 @@
       }
       const file = fileInput.files[0];
 
-      /* [2026-08-11] 파일명 필터 : FW_Total_*.bin 만 허용.
-         FW_Update_*.bin (앱만) 을 실수로 올리면 offset=0 flash 시 bootloader 없어 부팅 안됨. */
-      if (!isTotalBin(file.name)) {
-        setStatus(`❌ 파일명이 규칙에 맞지 않습니다 : "${file.name}"\n` +
-                  `→ FW_Total_V*.bin (Total 이미지) 만 업로드 가능합니다.\n` +
-                  `→ FW_Update_*.bin 은 앱만 있어 offset 0x0 flash 시 부팅 안됨.`, 'error');
-        return;
-      }
-
       const offsetStr = $('offset').value.trim();
       const offset = parseInt(offsetStr, 16);
       if (isNaN(offset)) {
         setStatus('⚠️ Offset 이 잘못됨. 예: 0x0 또는 0x10000', 'warn');
         return;
+      }
+
+      /* Total(0x0) / App(0x10000) 둘 다 허용. offset 과 파일 종류가 어긋나면
+         (0x0 에 앱만, 0x10000 에 전체) 부팅 불능이라 확인창으로 가드한다. */
+      const kind = classifyBin(file.name);
+      if (offset === 0x0 && kind === 'app') {
+        if (!confirm(`App 전용 파일 "${file.name}" 을 offset 0x0 에 굽습니다.\n` +
+                     `부트로더가 없어 부팅이 안 됩니다. App 은 보통 0x10000 입니다.\n그래도 진행할까요?`)) return;
+      }
+      if (offset === 0x10000 && kind === 'total') {
+        if (!confirm(`Total 전체 이미지 "${file.name}" 을 offset 0x10000 에 굽습니다.\n` +
+                     `부트로더가 엉뚱한 위치에 써져 부팅이 안 됩니다.\n그래도 진행할까요?`)) return;
       }
 
       log(`bin file : ${file.name} (${file.size} bytes)`);
@@ -275,32 +286,53 @@
       }
     }
 
-    /* [2026-08-11] Total 파일명 검증 함수 : "FW_Total_" 접두사 + ".bin" 확장자.
-       대소문자 무시. 예: FW_Total_V1.4.bin / fw_total_v1_4.bin 모두 허용. */
-    function isTotalBin(filename) {
-      const lower = filename.toLowerCase();
-      return lower.startsWith('fw_total_') && lower.endsWith('.bin');
+    /* 파일명으로 이미지 종류 추정 : fw_total_* → total(0x0),
+       fw_update_* 또는 이름에 "app" 포함 → app(0x10000), 그 외 → unknown. */
+    function classifyBin(filename) {
+      const n = filename.toLowerCase();
+      if (!n.endsWith('.bin')) return 'unknown';
+      if (n.startsWith('fw_total_')) return 'total';
+      if (n.startsWith('fw_update_') || n.includes('app')) return 'app';
+      return 'unknown';
     }
 
-    /* 파일 선택 시 즉시 검증 → 규칙 위반이면 UI 에 경고 표시 (flash 버튼 누르기 전에도 안내) */
+    const OFFSET_BY_TYPE = { total: '0x0', app: '0x10000' };
+
+    /* 라디오 선택 → offset 자동 설정 (custom 만 직접 입력 허용) */
+    function applyImgType(type) {
+      const off = $('offset');
+      if (type === 'custom') { off.readOnly = false; off.focus(); }
+      else { off.value = OFFSET_BY_TYPE[type]; off.readOnly = true; }
+    }
+    document.querySelectorAll('input[name="imgType"]').forEach((r) =>
+      r.addEventListener('change', () => applyImgType(r.value)));
+
+    function setImgType(type) {
+      const r = document.querySelector(`input[name="imgType"][value="${type}"]`);
+      if (r) { r.checked = true; applyImgType(type); }
+    }
+
+    /* 파일 선택 시 종류 자동 판별 → 라디오/offset 자동 설정 + 안내 */
     $('binFile').addEventListener('change', (e) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
       const name = files[0].name;
       const hint = $('fileHint');
-      if (isTotalBin(name)) {
-        hint.innerHTML = `✅ 유효한 Total 파일 : <code>${name}</code>`;
-        hint.style.color = '#065F46';   /* green */
-        hint.style.background = '#D1FAE5';
-        hint.style.padding = '8px';
-        hint.style.borderRadius = '6px';
+      const kind = classifyBin(name);
+      hint.style.padding = '8px';
+      hint.style.borderRadius = '6px';
+      if (kind === 'total') {
+        setImgType('total');
+        hint.innerHTML = `✅ Total 전체 이미지 : <code>${name}</code> → offset <code>0x0</code>`;
+        hint.style.color = '#065F46'; hint.style.background = '#D1FAE5';
+      } else if (kind === 'app') {
+        setImgType('app');
+        hint.innerHTML = `✅ App 이미지 : <code>${name}</code> → offset <code>0x10000</code>`;
+        hint.style.color = '#065F46'; hint.style.background = '#D1FAE5';
       } else {
-        hint.innerHTML = `❌ 파일명 규칙 위반 : <code>${name}</code><br>` +
-                        `→ <code>FW_Total_V*.bin</code> 만 허용. <code>FW_Update_*.bin</code> 은 offset 이 달라 부팅 안됨.`;
-        hint.style.color = '#991B1B';   /* red */
-        hint.style.background = '#FEE2E2';
-        hint.style.padding = '8px';
-        hint.style.borderRadius = '6px';
+        hint.innerHTML = `⚠️ 종류 자동판별 실패 : <code>${name}</code><br>` +
+                         `→ 아래 <b>이미지 종류</b>를 직접 선택하세요 (Total <code>0x0</code> / App <code>0x10000</code>).`;
+        hint.style.color = '#92400E'; hint.style.background = '#FEF3C7';
       }
     });
 
@@ -316,7 +348,7 @@
       setStatus('연결 해제됨', 'info');
     });
 
-    log('페이지 로드 완료. 1) bin 선택 → 2) offset 확인 → 3) COM Port 선택 → 4) Flash');
+    log('페이지 로드 완료. 1) bin 선택 → 2) 종류(Total 0x0 / App 0x10000) 확인 → 3) COM Port → 4) Flash');
   </script>
 </body>
 </html>
