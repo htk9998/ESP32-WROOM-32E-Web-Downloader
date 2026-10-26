@@ -94,7 +94,7 @@
     </div>
 
     <div class="row" style="margin-top:8px">
-      <button id="btnMonitor" class="btn-secondary" style="flex:0 0 auto">🖥️ Serial 열기 (115200) — 부트모드 확인</button>
+      <button id="btnMonitor" class="btn-secondary" style="flex:0 0 auto">Serial 열기 (115200) — 부트모드 확인</button>
       <button id="btnMonitorStop" class="btn-danger hidden" style="flex:0 0 auto">Serial 닫기</button>
     </div>
     <div style="font-size:12px;color:#666;margin-top:4px">
@@ -142,7 +142,7 @@
     }
 
     if (!('serial' in navigator)) {
-      setStatus('❌ 이 브라우저는 WebSerial API 를 지원하지 않습니다. Chrome / Edge 사용 필요.', 'error');
+      setStatus('이 브라우저는 WebSerial API 를 지원하지 않습니다. Chrome / Edge 사용 필요.', 'error');
       $('btnSelectPort').disabled = true;
       $('btnConnect').disabled = true;
       $('btnMonitor').disabled = true;
@@ -159,14 +159,14 @@
       try {
         monPort = device || await navigator.serial.requestPort({});
         device = monPort;                                   // Flash 와 포트 공유
-        $('portInfo').textContent = `✅ ${describePort(device)}`;
+        $('portInfo').textContent = `${describePort(device)}`;
         $('portInfo').style.color = '#059669';
         $('btnConnect').disabled = false;
         await monPort.open({ baudRate: 115200 });
         monRunning = true;
         $('btnMonitor').classList.add('hidden');
         $('btnMonitorStop').classList.remove('hidden');
-        setStatus('🖥️ Serial 모니터 ON (115200). 보드를 리셋해 메시지를 확인하세요.', 'info');
+        setStatus('Serial 모니터 ON (115200). 보드를 리셋해 메시지를 확인하세요.', 'info');
         log('--- Serial monitor 시작 (115200) ---');
         const decoder = new TextDecoder();
         let tail = '';
@@ -180,16 +180,16 @@
             logEl.scrollTop = logEl.scrollHeight;
             tail = (tail + text).slice(-400);
             if (/boot:0x3|DOWNLOAD|waiting for download/i.test(tail)) {
-              setStatus('✅ 다운로드(download) 모드 감지됨 — Serial 닫고 Flash 하세요.', 'success');
+              setStatus('다운로드(download) 모드 감지됨 — Serial 닫고 Flash 하세요.', 'success');
               tail = '';
             } else if (/SPI_FAST_FLASH_BOOT|boot:0x13/i.test(tail)) {
-              setStatus('ℹ️ 일반 부팅 감지 (download 아님) — BOOT 누른 채 리셋 필요.', 'warn');
+              setStatus('일반 부팅 감지 (download 아님) — BOOT 누른 채 리셋 필요.', 'warn');
               tail = '';
             }
           }
         }
       } catch (e) {
-        setStatus(`❌ 모니터 오류: ${e.message || e}`, 'error');
+        setStatus(`모니터 오류: ${e.message || e}`, 'error');
         log(`MONITOR ERROR: ${e.message || e}`);
       }
     }
@@ -226,19 +226,19 @@
 
     async function selectPort() {
       try {
-        setStatus('🔌 COM 포트 선택 창을 확인하세요...', 'info');
+        setStatus('COM 포트 선택 창을 확인하세요...', 'info');
         device = await navigator.serial.requestPort({});
         const desc = describePort(device);
-        $('portInfo').textContent = `✅ ${desc}`;
+        $('portInfo').textContent = `${desc}`;
         $('portInfo').style.color = '#059669';
         $('btnConnect').disabled = false;
-        setStatus(`✅ 포트 선택됨 : ${desc}`, 'success');
+        setStatus(`포트 선택됨 : ${desc}`, 'success');
         log(`Port selected : ${desc}`);
       } catch (e) {
         if (e.name === 'NotFoundError') {
-          setStatus('⚠️ 포트가 선택되지 않았습니다. 다시 시도해주세요.', 'warn');
+          setStatus('포트가 선택되지 않았습니다. 다시 시도해주세요.', 'warn');
         } else {
-          setStatus(`❌ 포트 선택 실패: ${e.message || e}`, 'error');
+          setStatus(`포트 선택 실패: ${e.message || e}`, 'error');
         }
       }
     }
@@ -246,12 +246,12 @@
     async function connectAndFlash() {
       if (monRunning) { await stopMonitor(); }   // 포트 배타적 → Flash 전 모니터 닫기
       if (!device) {
-        setStatus('⚠️ 먼저 COM Port 를 선택하세요.', 'warn');
+        setStatus('먼저 COM Port 를 선택하세요.', 'warn');
         return;
       }
       const fileInput = $('binFile');
       if (!fileInput.files || fileInput.files.length === 0) {
-        setStatus('⚠️ bin 파일을 먼저 선택하세요.', 'warn');
+        setStatus('bin 파일을 먼저 선택하세요.', 'warn');
         return;
       }
       const file = fileInput.files[0];
@@ -259,7 +259,7 @@
       const offsetStr = $('offset').value.trim();
       const offset = parseInt(offsetStr, 16);
       if (isNaN(offset)) {
-        setStatus('⚠️ Offset 이 잘못됨. 예: 0x0 또는 0x10000', 'warn');
+        setStatus('Offset 이 잘못됨. 예: 0x0 또는 0x10000', 'warn');
         return;
       }
 
@@ -292,10 +292,10 @@
           debugLogging: false,
         };
         esploader = new ESPLoader(flashOptions);
-        setStatus('🔗 ESP 연결 중...', 'info');
+        setStatus('ESP 연결 중...', 'info');
         const chip = await esploader.main();
         log(`Chip detected : ${chip}`);
-        setStatus(`✅ ${chip} 연결됨. Flash 시작...`, 'success');
+        setStatus(`${chip} 연결됨. Flash 시작...`, 'success');
 
         // Flash
         progEl.classList.remove('hidden');
@@ -315,14 +315,14 @@
           },
         });
 
-        setStatus('✅ Flash 완료! JIG 리셋 중...', 'success');
+        setStatus('Flash 완료! JIG 리셋 중...', 'success');
         log('Resetting device...');
         await esploader.hardReset();
-        setStatus('✅ 업데이트 완료. JIG 가 재부팅되었습니다.', 'success');
+        setStatus('업데이트 완료. JIG 가 재부팅되었습니다.', 'success');
         $('btnErase').classList.remove('hidden');
         $('btnDisconnect').classList.remove('hidden');
       } catch (e) {
-        setStatus(`❌ 오류: ${e.message || e}`, 'error');
+        setStatus(`오류: ${e.message || e}`, 'error');
         log(`ERROR: ${e.stack || e}`);
       } finally {
         try { if (transport) await transport.disconnect(); } catch (_) {}
@@ -339,11 +339,11 @@
         transport = new Transport(device, true);
         esploader = new ESPLoader({ transport, baudrate: 460800, romBaudrate: 115200 });
         await esploader.main();
-        setStatus('🗑️ 전체 erase 중...', 'warn');
+        setStatus('전체 erase 중...', 'warn');
         await esploader.eraseFlash();
-        setStatus('✅ Erase 완료', 'success');
+        setStatus('Erase 완료', 'success');
       } catch (e) {
-        setStatus(`❌ ${e.message || e}`, 'error');
+        setStatus(`${e.message || e}`, 'error');
       } finally {
         try { if (transport) await transport.disconnect(); } catch (_) {}
       }
@@ -386,14 +386,14 @@
       hint.style.borderRadius = '6px';
       if (kind === 'total') {
         setImgType('total');
-        hint.innerHTML = `✅ Total 전체 이미지 : <code>${name}</code> → offset <code>0x0</code>`;
+        hint.innerHTML = `Total 전체 이미지 : <code>${name}</code> → offset <code>0x0</code>`;
         hint.style.color = '#065F46'; hint.style.background = '#D1FAE5';
       } else if (kind === 'app') {
         setImgType('app');
-        hint.innerHTML = `✅ App 이미지 : <code>${name}</code> → offset <code>0x10000</code>`;
+        hint.innerHTML = `App 이미지 : <code>${name}</code> → offset <code>0x10000</code>`;
         hint.style.color = '#065F46'; hint.style.background = '#D1FAE5';
       } else {
-        hint.innerHTML = `⚠️ 종류 자동판별 실패 : <code>${name}</code><br>` +
+        hint.innerHTML = `종류 자동판별 실패 : <code>${name}</code><br>` +
                          `→ 아래 <b>이미지 종류</b>를 직접 선택하세요 (Total <code>0x0</code> / App <code>0x10000</code>).`;
         hint.style.color = '#92400E'; hint.style.background = '#FEF3C7';
       }
