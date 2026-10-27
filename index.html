@@ -87,6 +87,11 @@
       <option value="921600">921600</option>
     </select>
 
+    <label style="margin-top:12px; display:flex; align-items:center; gap:8px; font-weight:normal; cursor:pointer">
+      <input type="checkbox" id="noReset" checked style="width:auto; flex:0 0 auto">
+      자동 리셋 안 함 (no_reset) — 수동으로 BOOT 진입했을 때 체크
+    </label>
+
     <label style="margin-top:16px">3. COM Port 선택</label>
     <div class="row">
       <button id="btnSelectPort" class="btn-secondary" style="flex:0 0 auto">Select COM Port</button>
@@ -316,7 +321,9 @@
         };
         esploader = new ESPLoader(flashOptions);
         setStatus('ESP 연결 중...', 'info');
-        const chip = await esploader.main();
+        const resetMode = $('noReset').checked ? 'no_reset' : 'default_reset';
+        log(`connect mode : ${resetMode}`);
+        const chip = await esploader.main(resetMode);
         log(`Chip detected : ${chip}`);
         setStatus(`${chip} 연결됨. Flash 시작...`, 'success');
 
@@ -361,7 +368,7 @@
         device = await navigator.serial.requestPort({});
         transport = new Transport(device, true);
         esploader = new ESPLoader({ transport, baudrate: parseInt($('baud').value, 10) || 115200, romBaudrate: 115200 });
-        await esploader.main();
+        await esploader.main($('noReset').checked ? 'no_reset' : 'default_reset');
         setStatus('전체 erase 중...', 'warn');
         await esploader.eraseFlash();
         setStatus('Erase 완료', 'success');
